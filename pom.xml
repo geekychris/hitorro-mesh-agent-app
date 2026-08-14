@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.hitorro</groupId>
+    <artifactId>hitorro-mesh-agent-app</artifactId>
+    <version>3.0.1</version>
+    <packaging>jar</packaging>
+
+    <name>hitorro-mesh-agent-app</name>
+    <description>Runnable Spring Boot application that hosts a MeshAgent. Reads capabilities and local table registrations from properties/env, picks a transport (NATS or in-memory), and joins the mesh. Deployable as a fat JAR on any host that can reach the NATS server — the same JAR runs on Orion, Kubernetes, systemd, or plain java -jar.</description>
+
+    <properties>
+        <hitorro.deploy.repo.path>${user.home}/code/hitorro-maven</hitorro.deploy.repo.path>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <spring-boot.version>3.2.2</spring-boot.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!--
+        Aggressive exclusions repeated on each hitorro dep. The mesh agent doesn't
+        need Hadoop/AWS-SDK/ONNX/Groovy/POI/Lucene/RocksDB/Curator/OpenNLP/Solr/
+        Hibernate/PDFBox/BouncyCastle/Jetty — the base hitorro stack pulls them all
+        transitively (HDFS/S3 filesystem, NLP classifiers, kvstore, etc.), but a
+        mesh worker just needs jvssql + jackson + logback.
+
+        Why on every dep instead of dependencyManagement: Maven applies exclusions
+        per-dep-edge; the same transitive can come through multiple paths (mesh-core,
+        mesh-agent, mesh-nats all → hitorro-core → hadoop). Missing one lets the
+        transitive slip in via the resolver's shortest-path rule. Repetitive but
+        reliable. Cost: 400+ lines of XML we didn't have to think about hard.
+
+        Result: 900MB → ~150MB fat jar.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-core</artifactId>
+            <version>3.0.1</version>
+            <exclusions>
+                <!-- Logging conflicts (fought Spring Boot's Logback before). -->
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+                <!-- Filesystem backends the mesh doesn't use. -->
+                <exclusion><groupId>org.apache.hadoop</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop.thirdparty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.wildfly.openssl</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Coordination not used in phase 1/2 mesh. -->
+                <exclusion><groupId>org.apache.curator</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.zookeeper</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Alternative servlet container — Spring Boot brings Tomcat. -->
+                <exclusion><groupId>org.eclipse.jetty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.eclipse.jetty.toolchain</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Crypto library only needed by Hadoop's Kerberos support. -->
+                <exclusion><groupId>org.bouncycastle</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Groovy runtime. Mesh doesn't compile Groovy UDFs; if you add
+                     Groovy UDFs, re-include groovy-core (~5MB) — not the full groovy-all. -->
+                <exclusion><groupId>org.codehaus.groovy</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.jruby</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Document format libraries (basedms/features). Not used by mesh. -->
+                <exclusion><groupId>org.apache.poi</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.pdfbox</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.xmlbeans</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.drewnoakes</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>net.jthink</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Old XML-RPC / HTTP libraries. -->
+                <exclusion><groupId>org.apache.xmlrpc</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.ws.commons</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Mail / SSH / telnet servers baked into hitorro-util. -->
+                <exclusion><groupId>com.sun.mail</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.sshd</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>net.wimpi</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Redis / netty-tcnative platform binaries. -->
+                <exclusion><groupId>io.lettuce</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>io.netty</groupId><artifactId>netty-tcnative-boringssl-static</artifactId></exclusion>
+                <!-- Quartz scheduler — mesh has its own heartbeat scheduler. -->
+                <exclusion><groupId>org.quartz-scheduler</groupId><artifactId>*</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-agent</artifactId>
+            <version>3.0.1</version>
+            <exclusions>
+                <!-- Logging conflicts. -->
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+                <!-- Filesystem backends. -->
+                <exclusion><groupId>org.apache.hadoop</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop.thirdparty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.wildfly.openssl</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Coordination. -->
+                <exclusion><groupId>org.apache.curator</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.zookeeper</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Jetty. -->
+                <exclusion><groupId>org.eclipse.jetty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.eclipse.jetty.toolchain</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Kerberos crypto. -->
+                <exclusion><groupId>org.bouncycastle</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Scripting (jvssql-side) — mesh doesn't compile Groovy UDFs. -->
+                <exclusion><groupId>org.codehaus.groovy</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.jruby</groupId><artifactId>*</artifactId></exclusion>
+                <!-- NLP models pulled in by jsontypesystem — not used by mesh. -->
+                <exclusion><groupId>org.apache.opennlp</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.microsoft.onnxruntime</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>ai.djl.huggingface</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>ai.djl.api</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>net.sf.extjwnl</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Document formats. -->
+                <exclusion><groupId>org.apache.poi</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.pdfbox</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.xmlbeans</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.drewnoakes</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>net.jthink</groupId><artifactId>*</artifactId></exclusion>
+                <!-- XML-RPC. -->
+                <exclusion><groupId>org.apache.xmlrpc</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.ws.commons</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Mail/SSH/telnet. -->
+                <exclusion><groupId>com.sun.mail</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.sshd</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>net.wimpi</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Redis / netty tcnative. -->
+                <exclusion><groupId>io.lettuce</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>io.netty</groupId><artifactId>netty-tcnative-boringssl-static</artifactId></exclusion>
+                <!-- Quartz. -->
+                <exclusion><groupId>org.quartz-scheduler</groupId><artifactId>*</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-nats</artifactId>
+            <version>3.0.1</version>
+            <exclusions>
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop.thirdparty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>software.amazon.awssdk</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.curator</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.zookeeper</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.eclipse.jetty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.bouncycastle</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.codehaus.groovy</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.jruby</groupId><artifactId>*</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+
+        <!--
+            Streaming source adapters (phase 6b). Bundled so YAML-configured
+            kafka: / nats: table entries work out of the box. Both are thin
+            wrappers around hitorro-streams-* — adding them here pulls in
+            the kafka-clients + jnats deps that back them.
+        -->
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-streaming-kafka</artifactId>
+            <version>3.0.1</version>
+            <exclusions>
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-streaming-nats</artifactId>
+            <version>3.0.1</version>
+            <exclusions>
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <configuration>
+                    <mainClass>com.hitorro.mesh.agent.app.MeshAgentApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals><goal>repackage</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <distributionManagement>
+        <repository>
+            <id>hitorro-local</id>
+            <url>file://${hitorro.deploy.repo.path}</url>
+        </repository>
+    </distributionManagement>
+</project>

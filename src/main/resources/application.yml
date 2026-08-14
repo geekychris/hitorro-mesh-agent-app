@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: hitorro-mesh-agent
+  main:
+    banner-mode: off
+
+logging:
+  level:
+    root: INFO
+    com.hitorro.mesh: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+# All hitorro.mesh.agent.* fields are required at deployment time.
+# Provide via environment, external YAML, or CLI --hitorro.mesh.agent.id=...
+hitorro:
+  mesh:
+    agent:
+      transport: nats
+      nats-url: nats://localhost:4222
+      heartbeat-interval: 2s
