@@ -197,6 +197,54 @@
             </exclusions>
         </dependency>
 
+        <!--
+             hadoop-common — pulled in JUST for basefile's CompressionType
+             static initializer, which references org.apache.hadoop.io
+             .compress.BZip2Codec. Every other exclusion in this pom bans
+             Hadoop wholesale; we allowlist hadoop-common here and strip
+             everything transitive we don't need (HDFS clients, jersey,
+             jetty, kerberos, avro, etc). Adds ~4 MB to the fat jar.
+             NdjsonLocalTable uses BaseFile.getInputStream() which routes
+             the codec dispatch through basefile — same code path any
+             future S3/HDFS-backed dataset takes.
+        -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>3.3.6</version>
+            <exclusions>
+                <!-- hadoop-shaded-guava kept — Hadoop internals use its
+                     CacheLoader inside FileSystem. protobuf can go. -->
+                <exclusion><groupId>org.apache.hadoop.thirdparty</groupId><artifactId>hadoop-shaded-protobuf_3_7</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop.thirdparty</groupId><artifactId>hadoop-shaded-protobuf_3_21</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop.thirdparty</groupId><artifactId>hadoop-shaded-protobuf_3_25</artifactId></exclusion>
+                <exclusion><groupId>org.apache.zookeeper</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.curator</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.eclipse.jetty</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.eclipse.jetty.websocket</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.sun.jersey</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>javax.servlet</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>javax.servlet.jsp</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.avro</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.apache.kerby</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.jcraft</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.nimbusds</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.jline</groupId><artifactId>*</artifactId></exclusion>
+                <!-- Woodstox kept — Hadoop's Configuration.loadResource
+                     uses it to parse core-site.xml etc, even when we
+                     never call load(). Excluding it → ClassNotFoundException
+                     on com.ctc.wstx.io.InputBootstrapper at load time. -->
+                <exclusion><groupId>dnsjava</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>com.google.protobuf</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+                <exclusion><groupId>org.apache.htrace</groupId><artifactId>*</artifactId></exclusion>
+                <exclusion><groupId>org.bouncycastle</groupId><artifactId>*</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>

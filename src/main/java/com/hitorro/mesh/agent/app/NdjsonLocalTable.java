@@ -7,12 +7,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.mesh.agent.LocalTable;
+import com.hitorro.util.basefile.fs.BaseFile;
+import com.hitorro.util.basefile.fs.BaseFileSystem;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -45,8 +47,12 @@ public final class NdjsonLocalTable implements LocalTable {
 
     private static List<JVS> load(URI ndjson) throws IOException {
         List<JVS> out = new ArrayList<>();
-        URL url = ndjson.toURL();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(url.openStream(), StandardCharsets.UTF_8))) {
+        // Route local files through basefile so extension-based compression
+        // (.bz2, .bzip, .bzip2, .gz, .zstd) is decompressed transparently.
+        // Non-file schemes (http, s3, hdfs) fall back to URL.openStream —
+        // basefile has separate systems for those we haven't wired up here.
+        try (InputStream raw = openStream(ndjson);
+             BufferedReader r = new BufferedReader(new InputStreamReader(raw, StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
                 line = line.trim();
@@ -55,6 +61,30 @@ public final class NdjsonLocalTable implements LocalTable {
             }
         }
         return out;
+    }
+
+    /**
+     * Open the source stream via {@link BaseFile#getInputStream()} so
+     * every filesystem basefile knows about (local, HDFS, S3 via the
+     * addProtocolAdapter registry) works, AND extension-based
+     * decompression (.gz / .bz2 / .bzip / .zstd) happens transparently.
+     *
+     * <p>The URI is passed as-is to {@code getBaseFileFromPath} so the
+     * scheme drives which ProtocolAdapter picks it up:
+     * {@code file:} → FileFile, {@code hdfs:} → DFS, and so on. A bare
+     * absolute path with no scheme falls through to the DFS default,
+     * which is not what mesh datasets want, so the config layer requires
+     * a URI (all shipped configs use {@code file:...}).</p>
+     */
+    private static InputStream openStream(URI uri) throws IOException {
+        BaseFile bf = BaseFileSystem.getBaseFileFromPath(uri.toString());
+        if (bf == null) {
+            throw new IOException("basefile has no protocol adapter for " + uri
+                    + " — supported: file, hdfs, ftp, s3 (via addProtocolAdapter). "
+                    + "Make sure the ndjson-file config value includes an explicit "
+                    + "scheme like file:/path/to/data.ndjson.bz2");
+        }
+        return bf.getInputStream();
     }
 
     @Override public String name() { return name; }
