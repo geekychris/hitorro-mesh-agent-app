@@ -147,6 +147,31 @@
                 <exclusion><groupId>org.quartz-scheduler</groupId><artifactId>*</artifactId></exclusion>
             </exclusions>
         </dependency>
+        <!-- Agent-side pipeline executor. Autoconfig activates when
+             hitorro.mesh.pipelines.enabled=true, subscribing to
+             mesh.agent.pipeline.<agentId> and executing each incoming
+             NodeSpec via a local JobRunner. Advertises the pipeline-node
+             capability so the driver's PipelineScheduler can target this
+             agent. -->
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-agent-pipelines</artifactId>
+            <version>3.0.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.hitorro</groupId>
+            <artifactId>hitorro-mesh-pipelines</artifactId>
+            <version>3.0.1</version>
+        </dependency>
+        <!-- Groovy for the groovy-map step; jnats for NATS sink/source
+             (already transitively via hitorro-mesh-nats but declared
+             explicitly here so the pipelines module can use them). -->
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+            <version>4.0.21</version>
+        </dependency>
+
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-nats</artifactId>
