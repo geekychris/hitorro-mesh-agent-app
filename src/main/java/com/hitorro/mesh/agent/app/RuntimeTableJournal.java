@@ -159,8 +159,9 @@ public final class RuntimeTableJournal {
             log.warn("runtime-tables: journal line-count failed: {}", e.toString());
             return 0;
         }
-        // Only rewrite when there's actual savings — avoid churn.
-        if (oldLines <= active.size() + 4) return 0;
+        // Only rewrite when there's meaningful savings — avoid churn on
+        // already-tight files. Threshold: at least 3 lines to drop.
+        if (oldLines <= active.size() + 2) return 0;
 
         try {
             ensureDir();
