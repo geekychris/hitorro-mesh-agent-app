@@ -67,6 +67,10 @@ public class RuntimeTableInstaller {
             log.info("mesh: agent {} replayed {} runtime table(s) from journal ({} failed)",
                     agent.agentId(), replayed, replayFailed);
         }
+        // Boot-time compaction — collapses accumulated tombstones +
+        // replacements down to the current active set. Cheap: happens
+        // once per boot on a small file.
+        journal.compact();
 
         sub = agent.transport().subscribe(Subjects.agentControlRegisterTable(), this::handle);
         unregisterSub = agent.transport().subscribe(

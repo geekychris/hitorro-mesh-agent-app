@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -134,6 +135,55 @@ public final class RuntimeTableJournal {
                     badLines, file, okLines);
         }
         return new ArrayList<>(active.values());
+    }
+
+    /**
+     * Rewrite the journal to contain only currently-active register
+     * records — drops tombstones and older shadowed entries. Intended
+     * for boot-time compaction after {@link #loadActive} when the
+     * on-disk file has grown significantly larger than the active set.
+     *
+     * <p>Atomic-rename via a sibling {@code .tmp} file so a crash
+     * mid-compaction leaves either the old journal or the new one,
+     * never a partial file.</p>
+     *
+     * @return number of lines dropped (0 if the file was already tight)
+     */
+    public synchronized int compact() {
+        if (!Files.exists(file)) return 0;
+        List<RegisterTableMessage> active = loadActive();
+        long oldLines = -1;
+        try (var lines = Files.lines(file, StandardCharsets.UTF_8)) {
+            oldLines = lines.count();
+        } catch (IOException e) {
+            log.warn("runtime-tables: journal line-count failed: {}", e.toString());
+            return 0;
+        }
+        // Only rewrite when there's actual savings — avoid churn.
+        if (oldLines <= active.size() + 4) return 0;
+
+        try {
+            ensureDir();
+            Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+            StringBuilder sb = new StringBuilder();
+            for (RegisterTableMessage m : active) {
+                var n = MAPPER.createObjectNode();
+                n.put("op", "register");
+                n.set("msg", MAPPER.valueToTree(m));
+                sb.append(MAPPER.writeValueAsString(n)).append('\n');
+            }
+            Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.move(tmp, file,
+                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            long dropped = oldLines - active.size();
+            log.info("runtime-tables: compacted journal {} — {} lines → {} lines ({} dropped)",
+                    file.getFileName(), oldLines, active.size(), dropped);
+            return (int) dropped;
+        } catch (IOException e) {
+            log.warn("runtime-tables: journal compaction failed: {}", e.toString());
+            return 0;
+        }
     }
 
     private void ensureDir() throws IOException {
