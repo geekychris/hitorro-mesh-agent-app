@@ -52,5 +52,12 @@ public class MeshAgentMetrics {
         registry.gauge("mesh.agent.watermarks.emitted.total", java.util.List.of(
                 io.micrometer.core.instrument.Tag.of("agent", agentId)), agent,
                 MeshAgent::watermarksEmittedCount);
+        // Runtime-tables installed via RegisterTableMessage — counted as
+        // "how many slots the registry holds", so a broadcast dual-install
+        // reads as 2 (pk=null + pk="broadcast"). Alert on unexpected growth
+        // to catch runaway registrations or missing reconciles.
+        registry.gauge("mesh.agent.runtime.tables.total", java.util.List.of(
+                io.micrometer.core.instrument.Tag.of("agent", agentId)), agent,
+                a -> (double) a.runtimeTables().size());
     }
 }
