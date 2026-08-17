@@ -303,6 +303,21 @@
             <artifactId>avro</artifactId>
             <version>1.11.3</version>
         </dependency>
+        <!-- hadoop-aws — MinioProtocolAdapter delegates to Hadoop's
+             s3a FileSystem for actual I/O. Without this dep, s3:// URIs
+             fail with "ClassNotFoundException: S3AFileSystem" at read
+             time even though addProtocolAdapter succeeded. Needed for
+             the S3AdapterInstaller flow (agent-side S3 hot-switch) and
+             any s3:// runtime-registered table. -->
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-aws</artifactId>
+            <version>3.3.6</version>
+            <exclusions>
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
+                <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
+            </exclusions>
+        </dependency>
         <!-- ParquetReadOptions.Builder statically references
              org.apache.hadoop.mapreduce.lib.input.FileInputFormat.
              Without this dep every ParquetReader construction dies with

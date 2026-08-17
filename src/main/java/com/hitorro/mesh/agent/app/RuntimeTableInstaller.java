@@ -51,9 +51,9 @@ public class RuntimeTableInstaller {
 
     @PostConstruct
     public void start() {
-        sub = agent.transport().subscribe(Subjects.allAgentControl(), this::handle);
+        sub = agent.transport().subscribe(Subjects.agentControlRegisterTable(), this::handle);
         log.info("mesh: agent {} subscribed to {} for runtime table registration",
-                agent.agentId(), Subjects.allAgentControl());
+                agent.agentId(), Subjects.agentControlRegisterTable());
     }
 
     @PreDestroy
