@@ -187,8 +187,61 @@ public class RuntimeTableInstaller {
                             "parquet runtime tables require ParquetLocalTable on the classpath");
                 }
             }
+            case "kafka" -> buildKafka(msg, type, pk);
+            case "nats"  -> buildNats(msg, type, pk);
             default -> throw new IllegalArgumentException(
-                    "unknown table format: " + fmt + " (supported: ndjson, parquet)");
+                    "unknown table format: " + fmt + " (supported: ndjson, parquet, kafka, nats)");
         };
+    }
+
+    /** Build a KafkaStreamingLocalTable from the message's sourceConfig.
+     *  Required keys: bootstrap-servers, group-id, topic. Optional:
+     *  auto-offset-reset, auto-commit, max-poll-records, poll-timeout. */
+    private static LocalTable buildKafka(RegisterTableMessage msg, Type type, String pk) {
+        java.util.Map<String, String> cfg = msg.sourceConfig();
+        String bootstrap = required(cfg, "bootstrap-servers");
+        String groupId   = required(cfg, "group-id");
+        String topic     = required(cfg, "topic");
+        com.hitorro.streams.kafka.KafkaSource.Builder b =
+                com.hitorro.streams.kafka.KafkaSource.builder()
+                        .bootstrapServers(bootstrap)
+                        .groupId(groupId)
+                        .topic(topic);
+        if (cfg.get("auto-offset-reset") != null) b.autoOffsetReset(cfg.get("auto-offset-reset"));
+        if (cfg.get("auto-commit") != null) b.autoCommit(Boolean.parseBoolean(cfg.get("auto-commit")));
+        if (cfg.get("max-poll-records") != null) b.maxPollRecords(Integer.parseInt(cfg.get("max-poll-records")));
+        if (cfg.get("poll-timeout") != null) b.pollTimeout(java.time.Duration.parse(cfg.get("poll-timeout")));
+        return new com.hitorro.mesh.streaming.kafka.KafkaStreamingLocalTable(
+                msg.name(), type, pk, b.build());
+    }
+
+    /** Build a NatsJetStreamLocalTable from the message's sourceConfig.
+     *  Required keys: url, stream, subject. Optional: durable-name,
+     *  batch-size, fetch-timeout, connect-timeout, ack-wait. */
+    private static LocalTable buildNats(RegisterTableMessage msg, Type type, String pk) throws Exception {
+        java.util.Map<String, String> cfg = msg.sourceConfig();
+        String url     = required(cfg, "url");
+        String stream  = required(cfg, "stream");
+        String subject = required(cfg, "subject");
+        com.hitorro.streams.nats.NatsJetStreamSource.Builder b =
+                com.hitorro.streams.nats.NatsJetStreamSource.builder()
+                        .url(url)
+                        .stream(stream)
+                        .subject(subject);
+        if (cfg.get("durable-name")    != null) b.durableName(cfg.get("durable-name"));
+        if (cfg.get("batch-size")      != null) b.batchSize(Integer.parseInt(cfg.get("batch-size")));
+        if (cfg.get("fetch-timeout")   != null) b.fetchTimeout(java.time.Duration.parse(cfg.get("fetch-timeout")));
+        if (cfg.get("connect-timeout") != null) b.connectTimeout(java.time.Duration.parse(cfg.get("connect-timeout")));
+        if (cfg.get("ack-wait")        != null) b.ackWait(java.time.Duration.parse(cfg.get("ack-wait")));
+        return new com.hitorro.mesh.streaming.nats.NatsJetStreamLocalTable(
+                msg.name(), type, pk, b.build());
+    }
+
+    private static String required(java.util.Map<String, String> m, String key) {
+        String v = m == null ? null : m.get(key);
+        if (v == null || v.isBlank()) {
+            throw new IllegalArgumentException("streaming sourceConfig missing required key: " + key);
+        }
+        return v;
     }
 }
