@@ -9,6 +9,7 @@ import com.hitorro.mesh.Codecs;
 import com.hitorro.mesh.MeshTransport;
 import com.hitorro.mesh.RegisterTableMessage;
 import com.hitorro.mesh.Subjects;
+import com.hitorro.mesh.UnregisterTableMessage;
 import com.hitorro.mesh.agent.LocalTable;
 import com.hitorro.mesh.agent.MeshAgent;
 import jakarta.annotation.PostConstruct;
@@ -43,22 +44,62 @@ public class RuntimeTableInstaller {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final MeshAgent agent;
+    private final RuntimeTableJournal journal;
     private MeshTransport.Subscription sub;
+    private MeshTransport.Subscription unregisterSub;
 
     public RuntimeTableInstaller(MeshAgent agent) {
         this.agent = agent;
+        this.journal = new RuntimeTableJournal(agent.agentId());
     }
 
     @PostConstruct
     public void start() {
+        // Replay the journal so runtime-registered tables survive restarts.
+        // installOne() below records "did-load" instead of appending — the
+        // journal is already the source of truth for these entries.
+        int replayed = 0, replayFailed = 0;
+        for (RegisterTableMessage m : journal.loadActive()) {
+            if (installOne(m, /*persist=*/false)) replayed++;
+            else replayFailed++;
+        }
+        if (replayed + replayFailed > 0) {
+            log.info("mesh: agent {} replayed {} runtime table(s) from journal ({} failed)",
+                    agent.agentId(), replayed, replayFailed);
+        }
+
         sub = agent.transport().subscribe(Subjects.agentControlRegisterTable(), this::handle);
-        log.info("mesh: agent {} subscribed to {} for runtime table registration",
-                agent.agentId(), Subjects.agentControlRegisterTable());
+        unregisterSub = agent.transport().subscribe(
+                Subjects.agentControlUnregisterTable(), this::handleUnregister);
+        log.info("mesh: agent {} subscribed to {} + {} for runtime table registration",
+                agent.agentId(),
+                Subjects.agentControlRegisterTable(),
+                Subjects.agentControlUnregisterTable());
     }
 
     @PreDestroy
     public void stop() {
         if (sub != null) { sub.close(); sub = null; }
+        if (unregisterSub != null) { unregisterSub.close(); unregisterSub = null; }
+    }
+
+    private void handleUnregister(byte[] bytes) {
+        UnregisterTableMessage msg;
+        try {
+            msg = Codecs.decode(bytes, UnregisterTableMessage.class);
+        } catch (Exception e) {
+            log.warn("mesh: unregister-table decode failed: {}", e.toString());
+            return;
+        }
+        // Broadcast tables live under BOTH pk=null and pk="broadcast" —
+        // remove both slots when we don't know which the original was.
+        agent.runtimeTables().unregister(msg.name(), msg.partitionKey());
+        if (msg.partitionKey() == null) {
+            agent.runtimeTables().unregister(msg.name(), "broadcast");
+        }
+        journal.appendUnregister(msg.name(), msg.partitionKey());
+        log.info("mesh: agent {} unregistered runtime table {} (partition={})",
+                agent.agentId(), msg.name(), msg.partitionKey());
     }
 
     private void handle(byte[] bytes) {
@@ -69,6 +110,13 @@ public class RuntimeTableInstaller {
             log.warn("mesh: control message decode failed: {}", e.toString());
             return;
         }
+        installOne(msg, /*persist=*/true);
+    }
+
+    /** Install one message into the runtime registry.
+     *  @param persist true when the source is a live NATS message and we
+     *                 should durably record it; false during boot replay. */
+    private boolean installOne(RegisterTableMessage msg, boolean persist) {
         try {
             // Broadcast tables need DUAL registration (mirrors dataset pattern):
             //   - pk=null   → engineWithBroadcasts iterates for JOIN
@@ -79,8 +127,11 @@ public class RuntimeTableInstaller {
             if (msg.broadcast()) {
                 agent.runtimeTables().register(rewrapWithKey(base, "broadcast"));
             }
-            log.info("mesh: agent {} registered runtime table {} (broadcast={}, format={}, uri={})",
-                    agent.agentId(), msg.name(), msg.broadcast(), msg.format(), msg.uri());
+            if (persist) journal.appendRegister(msg);
+            log.info("mesh: agent {} {} runtime table {} (broadcast={}, format={}, uri={})",
+                    agent.agentId(), persist ? "registered" : "replayed",
+                    msg.name(), msg.broadcast(), msg.format(), msg.uri());
+            return true;
         } catch (Exception e) {
             // Unwrap the reflection wrapper so the real cause is visible.
             Throwable cause = e;
@@ -91,6 +142,7 @@ public class RuntimeTableInstaller {
             log.warn("mesh: agent {} failed to register runtime table {}: {}: {}",
                     agent.agentId(), msg.name(),
                     cause.getClass().getSimpleName(), cause.getMessage(), cause);
+            return false;
         }
     }
 
