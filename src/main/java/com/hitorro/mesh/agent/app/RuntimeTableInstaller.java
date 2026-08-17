@@ -101,6 +101,11 @@ public class RuntimeTableInstaller {
         if (msg.partitionKey() == null) {
             agent.runtimeTables().unregister(msg.name(), "broadcast");
         }
+        // Drop the corresponding partition capability so the driver
+        // stops routing partition-scoped queries here.
+        if (msg.partitionKey() != null && !msg.partitionKey().isBlank()) {
+            agent.removeRuntimeCapability("partition:" + msg.name() + ":" + msg.partitionKey());
+        }
         journal.appendUnregister(msg.name(), msg.partitionKey());
         log.info("mesh: agent {} unregistered runtime table {} (partition={})",
                 agent.agentId(), msg.name(), msg.partitionKey());
@@ -112,6 +117,14 @@ public class RuntimeTableInstaller {
             msg = Codecs.decode(bytes, RegisterTableMessage.class);
         } catch (Exception e) {
             log.warn("mesh: control message decode failed: {}", e.toString());
+            return;
+        }
+        // Per-agent routing filter: if targetAgentId is set and doesn't
+        // match this agent, silently skip. Every other agent that DOES
+        // match will install; driver's PartitionPlacement decides who
+        // gets what.
+        if (msg.targetAgentId() != null && !msg.targetAgentId().isBlank()
+                && !msg.targetAgentId().equals(agent.agentId())) {
             return;
         }
         installOne(msg, /*persist=*/true);
@@ -132,6 +145,13 @@ public class RuntimeTableInstaller {
                 agent.runtimeTables().register(rewrapWithKey(base, "broadcast"));
             }
             if (persist) journal.appendRegister(msg);
+            // Advertise the partition capability so the driver's dispatcher
+            // can route partition-scoped queries here. Broadcast tables
+            // are handled by the [jvssql] capability already; only
+            // distributed tables need the per-partition marker.
+            if (!msg.broadcast() && msg.partitionKey() != null && !msg.partitionKey().isBlank()) {
+                agent.addRuntimeCapability("partition:" + msg.name() + ":" + msg.partitionKey());
+            }
             log.info("mesh: agent {} {} runtime table {} (broadcast={}, format={}, uri={})",
                     agent.agentId(), persist ? "registered" : "replayed",
                     msg.name(), msg.broadcast(), msg.format(), msg.uri());
