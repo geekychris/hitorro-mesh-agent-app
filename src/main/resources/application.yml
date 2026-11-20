@@ -3,10 +3,18 @@ spring:
     name: hitorro-mesh-agent
   main:
     banner-mode: off
-  # Boot 4 defaults to Jackson 3; HiTorro returns Jackson 2 JsonNode values.
-  http:
-    converters:
-      preferred-json-mapper: jackson2
+  # Spring MVC writes JSON with Boot's Jackson 3 JsonMapper. Keep the format the app had on
+  # Jackson 2 (Boot's Jackson 2 mapper): Jackson 2 defaults + Boot's (ISO dates, unknown
+  # properties ignored) and Jackson 2.18's stream limits. See Jackson2CompatConfig.
+  jackson:
+    use-jackson2-defaults: true
+    factory:
+      constraints:
+        read:
+          max-nesting-depth: 1000
+          max-string-length: 20000000
+        write:
+          max-nesting-depth: 1000
 
 logging:
   level:
@@ -15,6 +23,9 @@ logging:
 
 management:
   endpoints:
+    # Actuator JSON comes from Jackson2CompatConfig.endpointJsonMapper (Jackson 2's format).
+    jackson:
+      isolated-json-mapper: false
     web:
       exposure:
         include: health,info

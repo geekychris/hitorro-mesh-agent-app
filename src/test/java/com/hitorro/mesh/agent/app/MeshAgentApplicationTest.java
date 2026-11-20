@@ -3,8 +3,8 @@
  */
 package com.hitorro.mesh.agent.app;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.mesh.MeshTransport;
 import com.hitorro.mesh.InMemoryMeshTransport;
 import com.hitorro.mesh.agent.MeshAgent;
@@ -52,7 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(MeshAgentApplicationTest.JsonNodeProbeController.class)
 class MeshAgentApplicationTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = com.hitorro.util.json.JsonMappers.json();
     private static final String[] STATE_PROPERTIES = {"hitorro.agent.home", "hitorro.pipelines.home"};
     private static final String[] previous = new String[STATE_PROPERTIES.length];
 
