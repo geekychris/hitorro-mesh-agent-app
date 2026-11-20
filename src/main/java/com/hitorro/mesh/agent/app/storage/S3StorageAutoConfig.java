@@ -39,6 +39,8 @@ public class S3StorageAutoConfig {
         MinioProtocolAdapter adapter = new MinioProtocolAdapter(
                 endpoint, bucket, accessKey, secretKey, sslEnabled);
         BaseFileSystem.addProtocolAdapter(adapter);
+        // Parquet tables read s3a:// through Hadoop: give S3A the same settings.
+        S3aSettings.configure(endpoint, accessKey, secretKey, sslEnabled);
         log.info("agent storage: s3:// routed to {} (bucket={}, ssl={})",
                 endpoint, bucket, sslEnabled);
         return adapter;
