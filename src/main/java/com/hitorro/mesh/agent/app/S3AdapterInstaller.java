@@ -8,6 +8,7 @@ import com.hitorro.mesh.EnableS3Message;
 import com.hitorro.mesh.MeshTransport;
 import com.hitorro.mesh.Subjects;
 import com.hitorro.mesh.agent.MeshAgent;
+import com.hitorro.mesh.agent.app.storage.S3aSettings;
 import com.hitorro.util.basefile.fs.BaseFileSystem;
 import com.hitorro.util.basefile.fs.s3.MinioProtocolAdapter;
 import jakarta.annotation.PostConstruct;
@@ -71,6 +72,7 @@ public class S3AdapterInstaller {
             MinioProtocolAdapter adapter = new MinioProtocolAdapter(
                     msg.endpoint(), msg.bucket(), msg.accessKey(), msg.secretKey(), msg.ssl());
             BaseFileSystem.addProtocolAdapter(adapter);
+            S3aSettings.configure(msg.endpoint(), msg.accessKey(), msg.secretKey(), msg.ssl());
             log.info("mesh: agent {} enabled S3 (endpoint={}, bucket={}, ssl={})",
                     agent.agentId(), msg.endpoint(), msg.bucket(), msg.ssl());
         } catch (Exception e) {

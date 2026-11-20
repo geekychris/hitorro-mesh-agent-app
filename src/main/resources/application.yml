@@ -3,6 +3,10 @@ spring:
     name: hitorro-mesh-agent
   main:
     banner-mode: off
+  # Boot 4 defaults to Jackson 3; HiTorro returns Jackson 2 JsonNode values.
+  http:
+    converters:
+      preferred-json-mapper: jackson2
 
 logging:
   level:

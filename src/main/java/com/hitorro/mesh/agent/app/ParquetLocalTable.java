@@ -10,6 +10,7 @@ import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.jvssql.config.StreamConfig;
 import com.hitorro.mesh.agent.LocalTable;
+import com.hitorro.mesh.agent.app.storage.S3aSettings;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.hadoop.conf.Configuration;
@@ -37,9 +38,9 @@ import java.util.List;
  *
  * <p>Destination URI drives Hadoop's {@code FileSystem} — {@code file:},
  * {@code s3a:}, {@code hdfs:} all work. For {@code s3a:} the agent
- * needs {@code fs.s3a.*} config in either {@code core-site.xml} on the
- * classpath or {@code -D} JVM flags before boot; see the
- * {@code hitorro.storage.s3.*} property surface driver-side.</p>
+ * gets its endpoint and credentials from {@link S3aSettings}, which the
+ * agent fills from {@code hitorro.storage.s3.*} or the driver's enable-s3
+ * message; {@code core-site.xml} still works for anything else.</p>
  *
  * <p>Loaded reflectively by {@link RuntimeTableInstaller} so agents
  * that don't have parquet-avro on the classpath just don't support
@@ -69,9 +70,9 @@ public final class ParquetLocalTable implements LocalTable {
         String u = parquet.toString();
         if (u.startsWith("s3://")) u = "s3a://" + u.substring("s3://".length());
 
-        Configuration conf = new Configuration();
-        // Best-effort MinIO defaults so file: and s3a: work out of the box.
-        conf.set("fs.s3a.path.style.access", "true");
+        // Path-style access plus the endpoint and credentials from the agent's
+        // S3 config (hitorro.storage.s3.* or the driver's enable-s3 message).
+        Configuration conf = S3aSettings.apply(new Configuration());
 
         List<JVS> out = new ArrayList<>();
         try (ParquetReader<GenericRecord> reader = AvroParquetReader
