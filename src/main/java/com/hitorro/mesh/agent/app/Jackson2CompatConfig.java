@@ -4,8 +4,11 @@
 package com.hitorro.mesh.agent.app;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.hitorro.util.json.Jackson2JdkModule;
 import com.hitorro.util.json.JsonMappers;
 import org.springframework.boot.actuate.endpoint.jackson.EndpointJsonMapper;
+import org.springframework.boot.health.actuate.endpoint.IndicatedHealthDescriptor;
 import org.springframework.boot.jackson.autoconfigure.JsonFactoryBuilderCustomizer;
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -13,10 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.cfg.DateTimeFeature;
-import tools.jackson.databind.module.SimpleModule;
-import tools.jackson.databind.ser.std.ToStringSerializer;
 
-import java.util.Locale;
 
 /**
  * Keeps the REST/JSON format the app had on Jackson 2 (Spring Boot's auto-configured Jackson 2
@@ -24,8 +24,8 @@ import java.util.Locale;
  * in application.yml: {@code spring.jackson.use-jackson2-defaults} (Jackson 2's defaults plus Boot's:
  * ISO dates, unknown properties ignored, ...) and Jackson 2.18's stream limits
  * ({@code spring.jackson.factory.constraints.*}). This adds what has no property: the factory-level
- * Jackson 2 defaults and Jackson 2's {@link Locale} format ({@code "fr_CA"}, not the language tag).
- * Same settings as hitorro-spring-boot 4.0.0's {@code HitorroJacksonAutoConfiguration}.
+ * Jackson 2 defaults and hitorro-core's {@link Jackson2JdkModule} (Jackson 2's {@code Locale},
+ * {@code Month} and {@code byte[]} handling, which Jackson 3 changed), as {@code JsonMappers} has.
  * <p>
  * Actuator endpoints have their own mapper. On Jackson 2 Boot built it from
  * {@code Jackson2ObjectMapperBuilder.json()} (Jackson 2 order, unknown properties and the default
@@ -44,8 +44,8 @@ public class Jackson2CompatConfig {
     }
 
     @Bean
-    JsonMapperBuilderCustomizer jackson2LocaleFormat() {
-        return builder -> builder.addModule(localeModule());
+    JsonMapperBuilderCustomizer jackson2JdkTypes() {
+        return builder -> builder.addModule(new Jackson2JdkModule());
     }
 
     @Bean
@@ -57,12 +57,18 @@ public class Jackson2CompatConfig {
                 .disable(MapperFeature.DEFAULT_VIEW_INCLUSION)
                 .changeDefaultPropertyInclusion(i -> i.withValueInclusion(JsonInclude.Include.NON_NULL)
                         .withContentInclusion(JsonInclude.Include.NON_NULL))
-                .addModule(localeModule())
-                .build();
+                .addMixIn(IndicatedHealthDescriptor.class, IndicatedHealthOrder.class)
+                .build();                                // (JsonMappers.builder() adds Jackson2JdkModule)
         return () -> mapper;
     }
 
-    private static SimpleModule localeModule() {
-        return new SimpleModule("jackson2-locale").addSerializer(Locale.class, ToStringSerializer.instance);
+
+    /**
+     * A health component is {@code {"status":..,"details":..}} on Jackson 2 (the inherited status getter
+     * first). The descriptor has getters only, and Jackson 3's order for those follows the JVM's method
+     * order, which changes between runs; this pins Jackson 2's.
+     */
+    @JsonPropertyOrder({"status", "details"})
+    private abstract static class IndicatedHealthOrder {
     }
 }
