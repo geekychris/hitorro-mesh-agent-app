@@ -23,7 +23,7 @@ logging:
 
 management:
   endpoints:
-    # Actuator JSON comes from Jackson2CompatConfig.endpointJsonMapper (Jackson 2's format).
+    # Actuator JSON comes from Jackson2CompatConfig.hitorroEndpointJsonMapper (Jackson 2's format); Jackson2Defaults sets these too, for deployments that replace this file.
     jackson:
       isolated-json-mapper: false
     web:

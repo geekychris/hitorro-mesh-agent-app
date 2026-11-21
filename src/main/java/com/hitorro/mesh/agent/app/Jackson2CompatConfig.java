@@ -13,6 +13,7 @@ import org.springframework.boot.jackson.autoconfigure.JsonFactoryBuilderCustomiz
 import org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.cfg.DateTimeFeature;
@@ -21,7 +22,8 @@ import tools.jackson.databind.cfg.DateTimeFeature;
 /**
  * Keeps the REST/JSON format the app had on Jackson 2 (Spring Boot's auto-configured Jackson 2
  * mapper), now that Spring MVC uses Boot's Jackson 3 {@code JsonMapper}. The mapper-level part is
- * in application.yml: {@code spring.jackson.use-jackson2-defaults} (Jackson 2's defaults plus Boot's:
+ * set by {@link Jackson2Defaults} (lowest-precedence defaults, so it survives a deployment that
+ * replaces application.yml with {@code --spring.config.location}): {@code spring.jackson.use-jackson2-defaults} (Jackson 2's defaults plus Boot's:
  * ISO dates, unknown properties ignored, ...) and Jackson 2.18's stream limits
  * ({@code spring.jackson.factory.constraints.*}). This adds what has no property: the factory-level
  * Jackson 2 defaults and hitorro-core's {@link Jackson2JdkModule} (Jackson 2's {@code Locale},
@@ -33,7 +35,7 @@ import tools.jackson.databind.cfg.DateTimeFeature;
  * Jackson 3 one is a plain {@code JsonMapper.builder()}, which sorts properties alphabetically
  * ({@code /actuator/health} became {@code {"groups":..,"status":"UP"}}). application.yml turns that
  * one off ({@code management.endpoints.jackson.isolated-json-mapper: false}) and
- * {@link #endpointJsonMapper()} provides the Jackson 2 equivalent.
+ * {@link #hitorroEndpointJsonMapper()} provides the Jackson 2 equivalent.
  */
 @Configuration(proxyBeanMethods = false)
 public class Jackson2CompatConfig {
@@ -48,8 +50,15 @@ public class Jackson2CompatConfig {
         return builder -> builder.addModule(new Jackson2JdkModule());
     }
 
+    /**
+     * Named so it can never clash with Boot's own {@code endpointJsonMapper} (created whenever
+     * {@code isolated-json-mapper} isn't false, e.g. when a deployment replaces application.yml
+     * with {@code --spring.config.location}), and {@code @Primary} so the actuator uses this one
+     * even then.
+     */
     @Bean
-    EndpointJsonMapper endpointJsonMapper() {
+    @Primary
+    EndpointJsonMapper hitorroEndpointJsonMapper() {
         var mapper = JsonMappers.builder()           // Jackson 2 defaults, factory features and 2.18 limits
                 .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .disable(DateTimeFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
