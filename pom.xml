@@ -785,6 +785,16 @@
                 <exclusion><groupId>com.google.inject</groupId><artifactId>guice</artifactId></exclusion>
             </exclusions>
         </dependency>
+        <!-- hitorro-core's logger (com.hitorro.util.log.Logger) calls the log4j 1
+             API (Logger, Level, Priority), and every reload4j is excluded here, so
+             the first use (e.g. HTS3FileSystem when a table is read from s3://)
+             failed with NoClassDefFoundError: org/apache/log4j/Priority. This
+             bridge provides that API on top of SLF4J. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>log4j-over-slf4j</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
