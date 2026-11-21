@@ -31,6 +31,24 @@ class PackagedAppIT {
 
     @Test
     void packagedJarStartsAndIsHealthy() throws Exception {
+        runPackaged(List.of());
+    }
+
+    /**
+     * hitorro-mesh-k8s' chart starts the app with {@code --spring.config.location=file:/config/*.yml},
+     * which REPLACES the packaged application.yml. The 4.0.0 release crashed there (a second
+     * {@code endpointJsonMapper} bean: isolated-json-mapper=false was only in application.yml) and
+     * would have lost the Jackson 2 format; {@link Jackson2Defaults} now supplies those settings.
+     */
+    @Test
+    void startsWhenTheDeploymentReplacesApplicationYml() throws Exception {
+        Path cfg = Files.createTempFile("deployment-config", ".yml");
+        Files.writeString(cfg, "spring:\n  application:\n    name: hitorro-mesh-agent\n"
+                + "management:\n  endpoints:\n    web:\n      exposure:\n        include: health,info\n");
+        runPackaged(List.of("--spring.config.location=file:" + cfg));
+    }
+
+    private void runPackaged(List<String> extra) throws Exception {
         String jar = System.getProperty("app.jar");
         assertThat(jar).as("app.jar system property (set by failsafe)").isNotNull();
         assertThat(new File(jar)).exists();
@@ -43,6 +61,7 @@ class PackagedAppIT {
                 "-Duser.home=" + home, "-Dhitorro.agent.home=" + home.resolve("agent"),
                 "-jar", jar, "--server.port=" + port));
         cmd.addAll(ARGS);
+        cmd.addAll(extra);
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
         try {
@@ -59,7 +78,8 @@ class PackagedAppIT {
                 Thread.sleep(500);
             }
             String out = Files.readString(log);
-            assertThat(out).doesNotContain("NoClassDefFoundError").doesNotContain("APPLICATION FAILED TO START");
+            assertThat(out).doesNotContain("NoClassDefFoundError").doesNotContain("APPLICATION FAILED TO START")
+                    .doesNotContain("BeanDefinitionOverrideException");
             assertThat(p.isAlive()).as("app process alive; log:%n%s", out).isTrue();
             assertThat(health).isEqualTo("{\"status\":\"UP\",\"groups\":[\"liveness\",\"readiness\"]}");
             HttpResponse<String> r = http.send(HttpRequest.newBuilder(
