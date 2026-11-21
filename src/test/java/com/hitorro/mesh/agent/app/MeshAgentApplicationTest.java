@@ -121,4 +121,26 @@ class MeshAgentApplicationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
     }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    tools.jackson.databind.json.JsonMapper bootJsonMapper;
+
+    /**
+     * Boot's mapper (Spring MVC's) writes what Boot's Jackson 2 mapper did for the JDK types Jackson 3
+     * changed: Locale as {@code toString()} ("fr_CA", not the language tag "fr-CA"), Month by name (not
+     * 10), byte[] in valueToTree as a binary (base64) node, and Instant as an ISO string.
+     */
+    @org.junit.jupiter.api.Test
+    void bootMapperWritesJdkTypesAsJackson2() throws Exception {
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("locale", java.util.Locale.CANADA_FRENCH);
+        m.put("month", java.time.Month.NOVEMBER);
+        m.put("bytes", new byte[]{1, 2, 3});
+        m.put("at", java.time.Instant.parse("2026-01-02T03:04:05.123Z"));
+        org.assertj.core.api.Assertions.assertThat(bootJsonMapper.writeValueAsString(m))
+                .isEqualTo("{\"locale\":\"fr_CA\",\"month\":\"NOVEMBER\",\"bytes\":\"AQID\",\"at\":\"2026-01-02T03:04:05.123Z\"}");
+        org.assertj.core.api.Assertions.assertThat(bootJsonMapper.valueToTree(new byte[]{1, 2, 3}).isBinary()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(bootJsonMapper.readValue("\"fr_CA\"", java.util.Locale.class))
+                .isEqualTo(java.util.Locale.CANADA_FRENCH);
+    }
 }
