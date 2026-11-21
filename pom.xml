@@ -27,17 +27,17 @@
             <dependency>
                 <groupId>com.hitorro</groupId>
                 <artifactId>hitorro-core</artifactId>
-                <version>3.1.0</version>
+                <version>4.0.0</version>
             </dependency>
             <dependency>
                 <groupId>com.hitorro</groupId>
                 <artifactId>hitorro-basefile</artifactId>
-                <version>3.1.0</version>
+                <version>4.0.0</version>
             </dependency>
             <dependency>
                 <groupId>com.hitorro</groupId>
                 <artifactId>hitorro-util</artifactId>
-                <version>3.1.0</version>
+                <version>4.0.0</version>
             </dependency>
             <!-- security pins (cloud-stack vulnerability registry) -->
             <dependency>
@@ -95,6 +95,15 @@
                 <artifactId>jline-terminal-jni</artifactId>
                 <version>3.30.17</version>
             </dependency>
+            <dependency>
+                <groupId>tools.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>3.1.8</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Jackson 2 still arrives through third-party libraries (calcite-core, parquet,
+                 ...): keep it pinned for security. HiTorro and the app use only Jackson 3. -->
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
@@ -453,7 +462,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-core</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
             <exclusions>
                 <!-- Logging conflicts (fought Spring Boot's Logback before). -->
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
@@ -500,7 +509,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-agent</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
             <exclusions>
                 <!-- Logging conflicts. -->
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
@@ -558,7 +567,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-agent-pipelines</artifactId>
-            <version>3.1.0</version>
+            <version>4.0.0</version>
             <exclusions>
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
                 <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
@@ -570,7 +579,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-pipelines</artifactId>
-            <version>3.1.0</version>
+            <version>4.0.0</version>
             <exclusions>
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
                 <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
@@ -591,7 +600,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-nats</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
             <exclusions>
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
                 <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
@@ -618,7 +627,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-streaming-kafka</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
             <exclusions>
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
                 <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
@@ -629,7 +638,7 @@
         <dependency>
             <groupId>com.hitorro</groupId>
             <artifactId>hitorro-mesh-streaming-nats</artifactId>
-            <version>3.0.2</version>
+            <version>4.0.0</version>
             <exclusions>
                 <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-reload4j</artifactId></exclusion>
                 <exclusion><groupId>ch.qos.reload4j</groupId><artifactId>reload4j</artifactId></exclusion>
@@ -696,16 +705,19 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
-        <!-- Keep Jackson 2 (com.fasterxml.jackson) for HTTP JSON: HiTorro hands out
-             Jackson 2 JsonNode values. Selected with
-             spring.http.converters.preferred-json-mapper=jackson2. -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-jackson2</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- hitorro-core's logger (com.hitorro.util.log.Logger) calls the log4j 1
+             API (Logger, Level, Priority), and every reload4j is excluded here, so
+             the first use (e.g. HTS3FileSystem when a table is read from s3://)
+             failed with NoClassDefFoundError: org/apache/log4j/Priority. This
+             bridge provides that API on top of SLF4J. (Same fix as #5;
+             S3NdjsonTableIntegrationTest reads an s3:// table from SeaweedFS.) -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>log4j-over-slf4j</artifactId>
         </dependency>
         <!-- Phase 7m: expose mesh_agent_* metrics via /actuator/prometheus.
              Optional runtime dep — omit if you scrape metrics another way. -->
@@ -841,6 +853,22 @@
                 <executions>
                     <execution>
                         <goals><goal>repackage</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Integration tests (*IT) run after `package` against the repackaged jar. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.2</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <app.jar>${project.build.directory}/${project.build.finalName}.jar</app.jar>
+                    </systemPropertyVariables>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals><goal>integration-test</goal><goal>verify</goal></goals>
                     </execution>
                 </executions>
             </plugin>

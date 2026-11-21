@@ -3,7 +3,7 @@
  */
 package com.hitorro.mesh.agent.app;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.mesh.agent.app.storage.S3StorageAutoConfig;
 import com.hitorro.mesh.agent.app.storage.S3aSettings;

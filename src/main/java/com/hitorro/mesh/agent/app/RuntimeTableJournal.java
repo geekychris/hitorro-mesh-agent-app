@@ -3,8 +3,8 @@
  */
 package com.hitorro.mesh.agent.app;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import com.hitorro.mesh.RegisterTableMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.hitorro.util.json.JsonValues;
 
 /**
  * NDJSON append-only journal of runtime table registrations, so
@@ -49,7 +50,7 @@ import java.util.Map;
 public final class RuntimeTableJournal {
 
     private static final Logger log = LoggerFactory.getLogger(RuntimeTableJournal.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = com.hitorro.util.json.JsonMappers.json();
 
     private final Path file;
 
@@ -77,7 +78,7 @@ public final class RuntimeTableJournal {
             Files.writeString(file, MAPPER.writeValueAsString(n) + "\n",
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (IOException e) {
+        } catch (IOException | tools.jackson.core.JacksonException e) {   // Jackson 3 errors are unchecked
             log.warn("runtime-tables: journal append (register) failed: {}", e.toString());
         }
     }
@@ -93,7 +94,7 @@ public final class RuntimeTableJournal {
             Files.writeString(file, MAPPER.writeValueAsString(n) + "\n",
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (IOException e) {
+        } catch (IOException | tools.jackson.core.JacksonException e) {   // Jackson 3 errors are unchecked
             log.warn("runtime-tables: journal append (unregister) failed: {}", e.toString());
         }
     }
@@ -112,13 +113,13 @@ public final class RuntimeTableJournal {
                 if (line.isBlank()) continue;
                 try {
                     ObjectNode n = (ObjectNode) MAPPER.readTree(line);
-                    String op = n.path("op").asText();
+                    String op = JsonValues.asText(n.path("op"));
                     if ("register".equals(op)) {
                         RegisterTableMessage m = MAPPER.treeToValue(n.get("msg"), RegisterTableMessage.class);
                         active.put(key(m.name(), m.partitionKey()), m);
                     } else if ("unregister".equals(op)) {
-                        String name = n.path("name").asText();
-                        String pk = n.hasNonNull("partitionKey") ? n.get("partitionKey").asText() : null;
+                        String name = JsonValues.asText(n.path("name"));
+                        String pk = n.hasNonNull("partitionKey") ? JsonValues.asText(n.get("partitionKey")) : null;
                         active.remove(key(name, pk));
                     }
                     okLines++;
@@ -181,7 +182,7 @@ public final class RuntimeTableJournal {
             log.info("runtime-tables: compacted journal {} — {} lines → {} lines ({} dropped)",
                     file.getFileName(), oldLines, active.size(), dropped);
             return (int) dropped;
-        } catch (IOException e) {
+        } catch (IOException | tools.jackson.core.JacksonException e) {   // Jackson 3 errors are unchecked
             log.warn("runtime-tables: journal compaction failed: {}", e.toString());
             return 0;
         }

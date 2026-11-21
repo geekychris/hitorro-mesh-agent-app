@@ -3,9 +3,9 @@
  */
 package com.hitorro.mesh.agent.app;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.jvssql.config.StreamConfig;
@@ -32,7 +32,7 @@ import java.util.List;
  *
  * <p>Uses parquet-avro's {@link AvroParquetReader} to hydrate each row
  * into an Avro {@link GenericRecord}, then converts to
- * {@link com.fasterxml.jackson.databind.node.ObjectNode} field-by-field
+ * {@link tools.jackson.databind.node.ObjectNode} field-by-field
  * so JVS can wrap it. Scalars keep their Parquet type (long, double,
  * boolean); byte-arrays and everything else stringify.</p>
  *
@@ -49,7 +49,7 @@ import java.util.List;
  */
 public final class ParquetLocalTable implements LocalTable {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = com.hitorro.util.json.JsonMappers.json();
 
     private final String name;
     private final Type type;

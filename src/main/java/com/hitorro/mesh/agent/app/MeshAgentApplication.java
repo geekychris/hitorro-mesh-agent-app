@@ -3,7 +3,7 @@
  */
 package com.hitorro.mesh.agent.app;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.mesh.InMemoryMeshTransport;
 import com.hitorro.mesh.MeshTransport;
@@ -53,7 +53,7 @@ import java.util.Set;
 public class MeshAgentApplication implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(MeshAgentApplication.class);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = com.hitorro.util.json.JsonMappers.json();
 
     private MeshAgent agent;
     private MeshTransport transport;

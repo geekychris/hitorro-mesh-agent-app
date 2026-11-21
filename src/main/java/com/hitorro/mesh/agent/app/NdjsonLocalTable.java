@@ -3,7 +3,7 @@
  */
 package com.hitorro.mesh.agent.app;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.hitorro.jsontypesystem.JVS;
 import com.hitorro.jsontypesystem.Type;
 import com.hitorro.mesh.agent.LocalTable;
@@ -31,7 +31,7 @@ import java.util.List;
  */
 public final class NdjsonLocalTable implements LocalTable {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = com.hitorro.util.json.JsonMappers.json();
 
     private final String name;
     private final Type type;
@@ -57,7 +57,12 @@ public final class NdjsonLocalTable implements LocalTable {
             while ((line = r.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
-                out.add(new JVS(MAPPER.readTree(line)));
+                try {
+                    out.add(new JVS(MAPPER.readTree(line)));
+                } catch (tools.jackson.core.JacksonException e) {
+                    // a malformed line is an IOException, as on Jackson 2 (JsonProcessingException)
+                    throw new IOException(e.getMessage(), e);
+                }
             }
         }
         return out;
